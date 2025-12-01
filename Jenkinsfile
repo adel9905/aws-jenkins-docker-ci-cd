@@ -2,48 +2,97 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "jenkins-aws-adel-app"
-        APP_PORT = "3000"
+        AWS_REGION = "us-east-1"
+        TF_DIR     = "infra"
+        APP_DIR    = "app"
     }
 
     stages {
-        stage('Checkout Code') {
+
+        stage('Checkout SCM') {
             steps {
                 checkout scm
             }
         }
 
+        stage('Checkout Code') {
+            steps {
+                // Just to show files / structure
+                sh 'pwd'
+                sh 'ls -R'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform init -input=false'
+                    sh 'terraform apply -auto-approve'
+                }
+            }
+        }
+
+        stage('Extract Terraform Outputs') {
+            steps {
+                dir("${TF_DIR}") {
+                    script {
+                        env.JENKINS_PUBLIC_IP = sh(
+                            script: 'terraform output -raw jenkins_public_ip',
+                            returnStdout: true
+                        ).trim()
+
+                        env.APP_URL = sh(
+                            script: 'terraform output -raw app_url',
+                            returnStdout: true
+                        ).trim()
+                    }
+                }
+                echo "Jenkins public IP: ${env.JENKINS_PUBLIC_IP}"
+                echo "App URL:          ${env.APP_URL}"
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
-                sh '''
-                  cd app
-                  docker build -t ${APP_NAME}:${BUILD_NUMBER} .
-                '''
+                dir("${APP_DIR}") {
+                    sh 'docker build -t aws-jenkins-demo-app:latest .'
+                }
             }
         }
 
         stage('Run Container') {
             steps {
                 sh '''
-                  # Stop and remove old container if exists
-                  docker ps -q --filter "name=${APP_NAME}" | xargs -r docker rm -f
+                  # stop old container if running
+                  docker ps -q --filter "name=aws-jenkins-demo-app" | xargs -r docker rm -f
 
-                  # Run new container
-                  docker run -d --name ${APP_NAME} \
-                    -p ${APP_PORT}:3000 \
-                    -e BUILD_NUMBER=${BUILD_NUMBER} \
-                    ${APP_NAME}:${BUILD_NUMBER}
+                  # run new container locally on port 3000
+                  docker run -d --name aws-jenkins-demo-app -p 3000:3000 aws-jenkins-demo-app:latest
                 '''
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                script {
+                    echo "Deploy to EC2 stage – here you can ssh to ${env.JENKINS_PUBLIC_IP} and run Docker remotely."
+                    // Example if later you have a separate app EC2:
+                    // sh """
+                    //   ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/keys/app-ec2-key.pem ubuntu@${env.JENKINS_PUBLIC_IP} \\
+                    //   'docker ps -q --filter "name=aws-jenkins-demo-app" | xargs -r docker rm -f && \\
+                    //    docker run -d --name aws-jenkins-demo-app -p 3000:3000 <your-ecr-or-docker-image>'
+                    // """
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Deployment successful. App running on port ${APP_PORT}"
+            echo 'Deployment successful. App running on port 3000'
         }
         failure {
-            echo "Build or deployment failed."
+            echo 'Pipeline failed – check stage logs.'
         }
     }
 }
