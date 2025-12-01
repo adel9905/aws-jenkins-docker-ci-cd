@@ -13,6 +13,7 @@ variable "instance_type" {
 variable "key_name" {
   description = "Name of an existing EC2 key pair to SSH into the instance"
   type        = string
+  default     = "aws-jenkins-key"
 }
 
 variable "allowed_ssh_cidr" {
