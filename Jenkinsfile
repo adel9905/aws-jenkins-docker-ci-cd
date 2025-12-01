@@ -23,14 +23,22 @@ pipeline {
             }
         }
 
-        stage('Terraform Apply') {
-            steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform init -input=false'
-                    sh 'terraform apply -auto-approve'
-                }
+       stage('Terraform Apply') {
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'aws-jenkins-creds',
+                usernameVariable: 'AWS_ACCESS_KEY_ID',
+                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )
+        ]) {
+            dir("${TF_DIR}") {
+                sh 'terraform init -input=false'
+                sh 'terraform apply -auto-approve'
             }
         }
+    }
+}
 
         stage('Extract Terraform Outputs') {
             steps {
