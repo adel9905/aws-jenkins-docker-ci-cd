@@ -23,22 +23,22 @@ pipeline {
             }
         }
 
-       stage('Terraform Apply') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'aws-jenkins-creds',
-                usernameVariable: 'AWS_ACCESS_KEY_ID',
-                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )
-        ]) {
-            dir("${TF_DIR}") {
-                sh 'terraform init -input=false'
-                sh 'terraform apply -auto-approve'
+        stage('Terraform Apply') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-jenkins-creds',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    dir("${TF_DIR}") {
+                        sh 'terraform init -input=false'
+                        sh 'terraform apply -auto-approve'
+                    }
+                }
             }
         }
-    }
-}
 
         stage('Extract Terraform Outputs') {
             steps {
@@ -53,10 +53,17 @@ pipeline {
                             script: 'terraform output -raw app_url',
                             returnStdout: true
                         ).trim()
+
+                        // NEW: SNS topic ARN for notifications
+                        env.NOTIFY_TOPIC_ARN = sh(
+                            script: 'terraform output -raw deploy_notifications_topic_arn',
+                            returnStdout: true
+                        ).trim()
                     }
                 }
                 echo "Jenkins public IP: ${env.JENKINS_PUBLIC_IP}"
                 echo "App URL:          ${env.APP_URL}"
+                echo "SNS Topic ARN:    ${env.NOTIFY_TOPIC_ARN}"
             }
         }
 
@@ -98,6 +105,23 @@ pipeline {
     post {
         success {
             echo 'Deployment successful. App running on port 3000'
+
+            // NEW: send SNS email notification after successful deployment
+            withCredentials([
+                usernamePassword(
+                    credentialsId: 'aws-jenkins-creds',
+                    usernameVariable: 'AWS_ACCESS_KEY_ID',
+                    passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                )
+            ]) {
+                sh """
+                  aws sns publish \
+                    --region ${AWS_REGION} \
+                    --topic-arn "${NOTIFY_TOPIC_ARN}" \
+                    --subject "Jenkins deployment succeeded: ${JOB_NAME} #${BUILD_NUMBER}" \
+                    --message "Pipeline ${JOB_NAME} build #${BUILD_NUMBER} finished successfully.\\nApp URL: ${APP_URL}\\nJenkins URL: http://${JENKINS_PUBLIC_IP}:8080"
+                """
+            }
         }
         failure {
             echo 'Pipeline failed – check stage logs.'
