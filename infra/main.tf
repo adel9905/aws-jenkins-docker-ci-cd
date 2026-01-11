@@ -34,7 +34,7 @@ data "aws_ami" "ubuntu_2204" {
 #########################
 
 resource "aws_security_group" "jenkins_sg" {
-  name        = "jenkins-adel-sg-v3"
+  name        = "jenkins-adel-sg-v6"
   description = "Security group for Jenkins + demo app"
   vpc_id      = aws_default_vpc.default.id
 
