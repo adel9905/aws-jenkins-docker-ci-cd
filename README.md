@@ -10,7 +10,7 @@ This project implements a full **CI/CD pipeline** on AWS using:
 -   **SNS Email Notifications** → Deployment alerts
 
 The purpose of this project is to practice **real DevOps workflows**
-including IaC, CI/CD, AWS automation, Docker builds, Terraform, SNS
+including IaC, CI/CD, AWS automation, Docker builds, Terraform, SNS.
 alerts, and app deployment on EC2.
 
 ------------------------------------------------------------------------
